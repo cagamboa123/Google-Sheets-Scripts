@@ -1,0 +1,31 @@
+The App is published!
+You can get the SpeakerNotes App at:
+https://chrome.google.com/webstore/a/google.com/detail/speakernotes/hebldoegongfncjimglocfofjgldipih?utm_source=permalink
+
+Instructions to use the app are here: https://docs.google.com/presentation/d/17hW2gqvecbGzO0pW7uTpE-p7nIewYevI6Dqa-v2xFaw/edit#slide=id.g35b647c0e8_0_225
+
+You are going to love this app if you need to create teleprompter scripts, or count words in the speaker notes, or download slides as .pgn files. 
+
+
+These instructions will allow you to use the scripts copied below. 
+You have to do this for every slide deck you create. 
+Once it is published we should not have to do this. 
+
+in slides 1) tools --> script editor
+2) paste script
+3) save script
+4) Resources --> advanced google services
+5) toggle on Google Slides API
+6) click the link in the yellow box to Enable APIs in your console
+7) refresh your deck
+8) click Custom Menu (a new menu appears)
+9) AUTHORIZE with your corp accont
+10) click Custom Menu again and type the slide you begin on hit OK
+11) new box pops up, type slide you end on (between yellow slides)
+12) click OK when it processes
+13) wait
+14) check your My Drive for a new doc called transcript
+15) rename it to be the filename specified in the coursemap / yellow slide 
+
+example of a completed folder with one script for each video:
+https://drive.google.com/corp/drive/folders/1gevKpvtCth65g5fWfCji-l0yqV2ZyhjS
