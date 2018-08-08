@@ -1,0 +1,659 @@
+# Google-Sheets-Scripts
+function onOpen() {
+  SlidesApp.getUi() // Or DocumentApp or FormApp.
+      .createMenu('Custom Menu')
+      .addItem('Timing Script', 'countWords')
+      .addItem('Create teleprompter Script', 'teleprompter')
+      //.addItem('Download slides and speakernotes as PDF', 'convertPDF')
+      .addItem('Create Presentation Document', 'presentation')
+      .addItem('Download slides as PNG images', 'downloadPresentation')      
+      .addToUi();
+}
+
+//======================
+function convertPDF() {
+  doc = DocumentApp.getActiveDocument();
+  // ADDED
+  var docId = doc.getId();
+  var docFolder = DriveApp.getFileById(docId).getParents().next().getId();
+  // ADDED
+  var ui = DocumentApp.getUi();
+  var result = ui.alert(
+      'Save As PDF?',
+      'Save current document (Name:'+doc.getName()+'.pdf) as PDF',
+      ui.ButtonSet.YES_NO);
+  if (result == ui.Button.YES) {
+    docblob = DocumentApp.getActiveDocument().getAs('application/pdf');
+    /* Add the PDF extension */
+    docblob.setName(doc.getName() + ".pdf");
+    var file = DriveApp.createFile(docblob);
+    // ADDED
+    var fileId = file.getId();
+    moveFileId(fileId, docFolder);
+    // ADDED
+    ui.alert('Your PDF file is available at ' + file.getUrl());
+  } else {
+    ui.alert('Request has been cancelled.');
+  }
+}
+
+
+//======================
+
+function countWords() {
+  var ui = SlidesApp.getUi(); // Same variations.
+  
+  var startSlide = ui.prompt(
+      'Enter the number of the first slide',
+      ui.ButtonSet.OK_CANCEL);
+  
+    var endSlide= ui.prompt(
+      'Enter the number of the last slide ',
+      ui.ButtonSet.OK_CANCEL);
+  
+  // Process the user's response.
+  var button = endSlide.getSelectedButton();
+  var start = startSlide.getResponseText();
+  var end = endSlide.getResponseText();
+  
+  if (button == ui.Button.OK) {
+    // User clicked "OK".
+    ui.alert('Processing slides ' + start + ' to ' + end);
+  } else if (button == ui.Button.CANCEL) {
+    // User clicked "Cancel".
+    ui.alert('I didn\'t get your slide numbers.');
+  } else if (button == ui.Button.CLOSE) {
+    // User clicked X in the title bar.
+    ui.alert('You closed the dialog.');
+  }
+  logSlidesAndElements(start, end);
+}
+
+
+//============
+function teleprompter() {
+  var ui = SlidesApp.getUi(); // Same variations.
+  
+  var startSlide = ui.prompt(
+      'Enter the number of the first slide',
+      ui.ButtonSet.OK_CANCEL);
+  
+    var endSlide= ui.prompt(
+      'Enter the number of the last slide ',
+      ui.ButtonSet.OK_CANCEL);
+  
+  // Process the user's response.
+  var button = endSlide.getSelectedButton();
+  var start = startSlide.getResponseText();
+  var end = endSlide.getResponseText();
+  
+  if (button == ui.Button.OK) {
+    // User clicked "OK".
+    ui.alert('Processing slides ' + start + ' to ' + end);
+  } else if (button == ui.Button.CANCEL) {
+    // User clicked "Cancel".
+    ui.alert('I didn\'t get your slide numbers.');
+  } else if (button == ui.Button.CLOSE) {
+    // User clicked X in the title bar.
+    ui.alert('You closed the dialog.');
+  }
+  createScript(start, end);
+}
+
+//===========
+function downloadPresentation() {
+  var id = SlidesApp.getActivePresentation().getId();
+  var slideIds = getSlideIds(id); 
+  var folderName = "DownloadPNGImages";
+  var destination = DriveApp.createFolder(folderName);
+  folderId = destination.getId();
+ 
+  for (var i = 0, slideId; slideId = slideIds[i]; i++) {
+    downloadSlide('Slide ' + (i + 1), id, slideId, folderId);
+  }
+}
+
+function downloadSlide(name, presentationId, slideId, folderId) {
+  var url = 'https://docs.google.com/presentation/d/' + presentationId +
+    '/export/png?id=' + presentationId + '&pageid=' + slideId; 
+  var options = {
+    headers: {
+      Authorization: 'Bearer ' + ScriptApp.getOAuthToken()
+    }
+  };
+  var response = UrlFetchApp.fetch(url, options);
+  var image = response.getAs(MimeType.PNG);
+  image.setName(name);
+  //DriveApp.createFile(image);
+  DriveApp.getFolderById(folderId).createFile(image);
+  
+}
+
+function getSlideIds(presentationId) {
+  var url = 'https://slides.googleapis.com/v1/presentations/' + presentationId;
+  var options = {
+    headers: {
+      Authorization: 'Bearer ' + ScriptApp.getOAuthToken()
+    }
+  };
+  var response = UrlFetchApp.fetch(url, options);
+
+  var slideData = JSON.parse(response);
+  return slideData.slides.map(function(slide) {
+    return slide.objectId;
+  });
+}
+
+
+//============
+function presentation() {
+  var ui = SlidesApp.getUi(); // Same variations.
+  
+  var startSlide = ui.prompt(
+      'Enter the number of the first slide',
+      ui.ButtonSet.OK_CANCEL);
+  
+    var endSlide= ui.prompt(
+      'Enter the number of the last slide ',
+      ui.ButtonSet.OK_CANCEL);
+  
+  // Process the user's response.
+  var button = endSlide.getSelectedButton();
+  var start = startSlide.getResponseText();
+  var end = endSlide.getResponseText();
+  
+  if (button == ui.Button.OK) {
+    // User clicked "OK".
+    ui.alert('Processing slides ' + start + ' to ' + end);
+  } else if (button == ui.Button.CANCEL) {
+    // User clicked "Cancel".
+    ui.alert('I didn\'t get your slide numbers.');
+  } else if (button == ui.Button.CLOSE) {
+    // User clicked X in the title bar.
+    ui.alert('You closed the dialog.');
+  }
+  createPresentation(start, end);
+}
+
+//================
+function createPresentation(start, end) {
+
+  var presentationId = SlidesApp.getActivePresentation().getId();
+  var presentation = Slides.Presentations.get(presentationId);
+  var slides = presentation.slides;
+  
+  var wordTotal = 0;
+  var startSlide = +start;
+  var endSlide = +end;  //slides.length for end of slide deck
+  var wordsPerSec = 3;
+  var MAXWORDS = 90;
+  var stats = [];
+  
+  //create a document for the teleprompter script
+  name = presentation.title + " Presentation " + "Slides " + startSlide + " to " + endSlide
+  doc = DocumentApp.create(name);
+  edited = doc.getBody();
+  text = edited.editAsText();
+  
+  //go through each slide and count the words
+  for (i = startSlide-1; i < endSlide; i++) { 
+    alert = false;
+    rr = SlidesApp.getActivePresentation().getSlides()[i];
+    slideId = rr.getObjectId();
+    var url = 'https://docs.google.com/presentation/d/' + presentationId +
+    '/export/png?id=' + presentationId + '&pageid=' + slideId; 
+      var options = {
+    headers: {
+      Authorization: 'Bearer ' + ScriptApp.getOAuthToken()
+    }
+  };
+        
+  var response = UrlFetchApp.fetch(url, options);
+  var image = response.getAs(MimeType.PNG);  
+    doc.getBody().appendImage(image).setWidth(600).setHeight(300);
+    
+    sn = rr.getNotesPage().getSpeakerNotesShape().getText();
+    snString = sn.asString();
+ 
+    slideAdjust = i+1;
+    text.appendText("\n");
+    var boldNot = text.appendText(sn.asString());
+    text.appendText("\n\n");
+  }
+}
+
+//=============== 
+function logSlidesAndElements(start, end) {
+  var style = {};
+  var styleNot = {};
+  style[DocumentApp.Attribute.BOLD] = true;
+  styleNot[DocumentApp.Attribute.BOLD] = false;
+  
+  var presentationId = SlidesApp.getActivePresentation().getId();
+  var presentation = Slides.Presentations.get(presentationId);
+  var slides = presentation.slides;
+  var wordTotal = 0;
+  var startSlide = +start;
+  var endSlide = +end;  //slides.length for end of slide deck
+  var wordsPerSec = 3;
+  var MAXWORDS = 90;
+  var stats = [];
+  
+  //create a document for the teleprompter script
+  Logger.log('The presentation contains %s slides:', slides.length);
+  name = presentation.title + " WordCount script " + "Slides " + startSlide + " to " + endSlide
+  doc = DocumentApp.create(name);
+  edited = doc.getBody();
+  text = edited.editAsText();
+  //end = +endSlide;
+  
+  //go through each slide and count the words
+  for (i = startSlide-1; i < endSlide; i++) { 
+    alert = false;
+    rr = SlidesApp.getActivePresentation().getSlides()[i]
+    sn = rr.getNotesPage().getSpeakerNotesShape().getText();
+    snString = sn.asString();
+    //split the string into words, then count them
+    wordCount = snString.split(/\s* \s*/).length;
+    wordTotal = wordTotal + wordCount
+    Logger.log("word count is %s",wordTotal);
+    //calculate the approx time for slide
+    slideTime = Math.round(wordCount/wordsPerSec);       
+    scriptTime = Math.round(wordTotal/wordsPerSec);
+    
+    if(wordCount >= MAXWORDS){
+      alert = true;
+    }
+    //adjust the slide number that is printed out - add one because slides starts at 0, but shows as slide 1
+    if(alert == true){
+      text.appendText("####THIS SLIDE MAY BE TOO LONG####\n");
+    }
+    slideAdjust = i+1;
+    Logger.log('slide %s %s ', slideAdjust, snString); 
+    slideNumber = "Slide " + slideAdjust + ": word count this slide =  " + wordCount + " and word count Total = " + wordTotal + "\n";
+    var bolded = text.appendText(slideNumber);
+    recordTime = "Time to record slide = " + slideTime + "sec.  Total time to record = " + scriptTime + " sec. \n";
+    text.appendText(recordTime)
+    text.appendText("\n");
+    var boldNot = text.appendText(sn.asString());
+    text.appendText("\n\n");
+    //add to array for end of file total stats
+    stats[slideAdjust] = slideTime;
+  }
+    Logger.log("word count is %s",wordTotal);
+    text.appendText("Slide Stats\n\n");
+  for(j=startSlide;j< endSlide;j++){
+    text.appendText("Slide " + j + ": " + stats[j] + " sec.\n");
+  }
+    text.appendText("Total time = " + scriptTime + " sec.");
+}
+
+function createScript(start, end) {
+  var style = {};
+  var styleNot = {};
+  style[DocumentApp.Attribute.BOLD] = true;
+  styleNot[DocumentApp.Attribute.BOLD] = false;
+  
+  var presentationId = SlidesApp.getActivePresentation().getId();
+  var presentation = Slides.Presentations.get(presentationId);
+  var slides = presentation.slides;
+  var wordTotal = 0;
+  var startSlide = +start;
+  var endSlide = +end;  //slides.length for end of slide deck
+  var wordsPerSec = 3;
+  var MAXWORDS = 90;
+  var stats = [];
+  
+  //create a document for the teleprompter script
+  Logger.log('The presentation contains %s slides:', slides.length);
+  name = presentation.title + " Teleprompter script " + "Slides " + startSlide + " to " + endSlide
+  doc = DocumentApp.create(name);
+  edited = doc.getBody();
+  text = edited.editAsText();
+  //end = +endSlide;
+  
+  //go through each slide and count the words
+  for (i = startSlide-1; i < endSlide; i++) { 
+    alert = false;
+    rr = SlidesApp.getActivePresentation().getSlides()[i]
+    sn = rr.getNotesPage().getSpeakerNotesShape().getText();
+    snString = sn.asString();
+    //split the string into words, then count them
+    wordCount = snString.split(/\s* \s*/).length;
+    wordTotal = wordTotal + wordCount
+    Logger.log("word count is %s",wordTotal);
+    //calculate the approx time for slide
+    slideTime = Math.round(wordCount/wordsPerSec);       
+    scriptTime = Math.round(wordTotal/wordsPerSec);
+    
+    if(wordCount >= MAXWORDS){
+      alert = true;
+    }
+    //adjust the slide number that is printed out - add one because slides starts at 0, but shows as slide 1
+    if(alert == true){
+      //text.appendText("####THIS SLIDE MAY BE TOO LONG####\n");
+    }
+    slideAdjust = i+1;
+    Logger.log('slide %s %s ', slideAdjust, snString); 
+    slideNumber = "Slide " + slideAdjust + "\n";
+    var bolded = text.appendText(slideNumber);
+    recordTime = "Time to record slide = " + slideTime + "sec.  Total time to record = " + scriptTime + " sec. \n";
+    //text.appendText(recordTime)
+    text.appendText("\n");
+    var boldNot = text.appendText(snString);
+    text.appendText("\n\n");
+    //add to array for end of file total stats
+    stats[slideAdjust] = slideTime;
+  }
+    Logger.log("word count is %s",wordTotal);
+    text.appendText("Slide Stats\n\n");
+  for(j=startSlide;j< endSlide;j++){
+    text.appendText("Slide " + j + ": " + stats[j] + " sec.\n");
+  }
+    text.appendText("Total time = " + scriptTime + " sec.");
+}
+
+'Create telepromoter Script', 'teleprompter')
+      //.addItem('Download slides and speakernotes as PDF', 'convertPDF')
+      .addItem('Create Presentation Document', 'presentation')
+      .addToUi();
+}
+
+//======================
+function convertPDF() {
+  doc = DocumentApp.getActiveDocument();
+  // ADDED
+  var docId = doc.getId();
+  var docFolder = DriveApp.getFileById(docId).getParents().next().getId();
+  // ADDED
+  var ui = DocumentApp.getUi();
+  var result = ui.alert(
+      'Save As PDF?',
+      'Save current document (Name:'+doc.getName()+'.pdf) as PDF',
+      ui.ButtonSet.YES_NO);
+  if (result == ui.Button.YES) {
+    docblob = DocumentApp.getActiveDocument().getAs('application/pdf');
+    /* Add the PDF extension */
+    docblob.setName(doc.getName() + ".pdf");
+    var file = DriveApp.createFile(docblob);
+    // ADDED
+    var fileId = file.getId();
+    moveFileId(fileId, docFolder);
+    // ADDED
+    ui.alert('Your PDF file is available at ' + file.getUrl());
+  } else {
+    ui.alert('Request has been cancelled.');
+  }
+}
+
+
+//======================
+
+function countWords() {
+  var ui = SlidesApp.getUi(); // Same variations.
+  
+  var startSlide = ui.prompt(
+      'Enter the number of the first slide',
+      ui.ButtonSet.OK_CANCEL);
+  
+    var endSlide= ui.prompt(
+      'Enter the number of the last slide ',
+      ui.ButtonSet.OK_CANCEL);
+  
+  // Process the user's response.
+  var button = endSlide.getSelectedButton();
+  var start = startSlide.getResponseText();
+  var end = endSlide.getResponseText();
+  
+  if (button == ui.Button.OK) {
+    // User clicked "OK".
+    ui.alert('Processing slides ' + start + ' to ' + end);
+  } else if (button == ui.Button.CANCEL) {
+    // User clicked "Cancel".
+    ui.alert('I didn\'t get your slide numbers.');
+  } else if (button == ui.Button.CLOSE) {
+    // User clicked X in the title bar.
+    ui.alert('You closed the dialog.');
+  }
+  logSlidesAndElements(start, end);
+}
+
+
+//============
+function teleprompter() {
+  var ui = SlidesApp.getUi(); // Same variations.
+  
+  var startSlide = ui.prompt(
+      'Enter the number of the first slide',
+      ui.ButtonSet.OK_CANCEL);
+  
+    var endSlide= ui.prompt(
+      'Enter the number of the last slide ',
+      ui.ButtonSet.OK_CANCEL);
+  
+  // Process the user's response.
+  var button = endSlide.getSelectedButton();
+  var start = startSlide.getResponseText();
+  var end = endSlide.getResponseText();
+  
+  if (button == ui.Button.OK) {
+    // User clicked "OK".
+    ui.alert('Processing slides ' + start + ' to ' + end);
+  } else if (button == ui.Button.CANCEL) {
+    // User clicked "Cancel".
+    ui.alert('I didn\'t get your slide numbers.');
+  } else if (button == ui.Button.CLOSE) {
+    // User clicked X in the title bar.
+    ui.alert('You closed the dialog.');
+  }
+  createScript(start, end);
+}
+
+
+//============
+function presentation() {
+  var ui = SlidesApp.getUi(); // Same variations.
+  
+  var startSlide = ui.prompt(
+      'Enter the number of the first slide',
+      ui.ButtonSet.OK_CANCEL);
+  
+    var endSlide= ui.prompt(
+      'Enter the number of the last slide ',
+      ui.ButtonSet.OK_CANCEL);
+  
+  // Process the user's response.
+  var button = endSlide.getSelectedButton();
+  var start = startSlide.getResponseText();
+  var end = endSlide.getResponseText();
+  
+  if (button == ui.Button.OK) {
+    // User clicked "OK".
+    ui.alert('Processing slides ' + start + ' to ' + end);
+  } else if (button == ui.Button.CANCEL) {
+    // User clicked "Cancel".
+    ui.alert('I didn\'t get your slide numbers.');
+  } else if (button == ui.Button.CLOSE) {
+    // User clicked X in the title bar.
+    ui.alert('You closed the dialog.');
+  }
+  createPresentation(start, end);
+}
+
+//================
+function createPresentation(start, end) {
+
+  var presentationId = SlidesApp.getActivePresentation().getId();
+  var presentation = Slides.Presentations.get(presentationId);
+  var slides = presentation.slides;
+  
+  var wordTotal = 0;
+  var startSlide = +start;
+  var endSlide = +end;  //slides.length for end of slide deck
+  var wordsPerSec = 3;
+  var MAXWORDS = 90;
+  var stats = [];
+  
+  //create a document for the teleprompter script
+  name = presentation.title + " Presentation " + "Slides " + startSlide + " to " + endSlide
+  doc = DocumentApp.create(name);
+  edited = doc.getBody();
+  text = edited.editAsText();
+  
+  //go through each slide and count the words
+  for (i = startSlide-1; i < endSlide; i++) { 
+    alert = false;
+    rr = SlidesApp.getActivePresentation().getSlides()[i];
+    slideId = rr.getObjectId();
+    var url = 'https://docs.google.com/presentation/d/' + presentationId +
+    '/export/png?id=' + presentationId + '&pageid=' + slideId; 
+      var options = {
+    headers: {
+      Authorization: 'Bearer ' + ScriptApp.getOAuthToken()
+    }
+  };
+        
+  var response = UrlFetchApp.fetch(url, options);
+  var image = response.getAs(MimeType.PNG);  
+    doc.getBody().appendImage(image).setWidth(600).setHeight(300);
+    
+    sn = rr.getNotesPage().getSpeakerNotesShape().getText();
+    snString = sn.asString();
+ 
+    slideAdjust = i+1;
+    text.appendText("\n");
+    var boldNot = text.appendText(sn.asString());
+    text.appendText("\n\n");
+  }
+}
+
+//=============== 
+function logSlidesAndElements(start, end) {
+  var style = {};
+  var styleNot = {};
+  style[DocumentApp.Attribute.BOLD] = true;
+  styleNot[DocumentApp.Attribute.BOLD] = false;
+  
+  var presentationId = SlidesApp.getActivePresentation().getId();
+  var presentation = Slides.Presentations.get(presentationId);
+  var slides = presentation.slides;
+  var wordTotal = 0;
+  var startSlide = +start;
+  var endSlide = +end;  //slides.length for end of slide deck
+  var wordsPerSec = 3;
+  var MAXWORDS = 90;
+  var stats = [];
+  
+  //create a document for the teleprompter script
+  Logger.log('The presentation contains %s slides:', slides.length);
+  name = presentation.title + " WordCount script " + "Slides " + startSlide + " to " + endSlide
+  doc = DocumentApp.create(name);
+  edited = doc.getBody();
+  text = edited.editAsText();
+  //end = +endSlide;
+  
+  //go through each slide and count the words
+  for (i = startSlide-1; i < endSlide; i++) { 
+    alert = false;
+    rr = SlidesApp.getActivePresentation().getSlides()[i]
+    sn = rr.getNotesPage().getSpeakerNotesShape().getText();
+    snString = sn.asString();
+    //split the string into words, then count them
+    wordCount = snString.split(/\s* \s*/).length;
+    wordTotal = wordTotal + wordCount
+    Logger.log("word count is %s",wordTotal);
+    //calculate the approx time for slide
+    slideTime = Math.round(wordCount/wordsPerSec);       
+    scriptTime = Math.round(wordTotal/wordsPerSec);
+    
+    if(wordCount >= MAXWORDS){
+      alert = true;
+    }
+    //adjust the slide number that is printed out - add one because slides starts at 0, but shows as slide 1
+    if(alert == true){
+      text.appendText("####THIS SLIDE MAY BE TOO LONG####\n");
+    }
+    slideAdjust = i+1;
+    Logger.log('slide %s %s ', slideAdjust, snString); 
+    slideNumber = "Slide " + slideAdjust + ": word count this slide =  " + wordCount + " and word count Total = " + wordTotal + "\n";
+    var bolded = text.appendText(slideNumber);
+    recordTime = "Time to record slide = " + slideTime + "sec.  Total time to record = " + scriptTime + " sec. \n";
+    text.appendText(recordTime)
+    text.appendText("\n");
+    var boldNot = text.appendText(sn.asString());
+    text.appendText("\n\n");
+    //add to array for end of file total stats
+    stats[slideAdjust] = slideTime;
+  }
+    Logger.log("word count is %s",wordTotal);
+    text.appendText("Slide Stats\n\n");
+  for(j=startSlide;j< endSlide;j++){
+    text.appendText("Slide " + j + ": " + stats[j] + " sec.\n");
+  }
+    text.appendText("Total time = " + scriptTime + " sec.");
+}
+
+function createScript(start, end) {
+  var style = {};
+  var styleNot = {};
+  style[DocumentApp.Attribute.BOLD] = true;
+  styleNot[DocumentApp.Attribute.BOLD] = false;
+  
+  var presentationId = SlidesApp.getActivePresentation().getId();
+  var presentation = Slides.Presentations.get(presentationId);
+  var slides = presentation.slides;
+  var wordTotal = 0;
+  var startSlide = +start;
+  var endSlide = +end;  //slides.length for end of slide deck
+  var wordsPerSec = 3;
+  var MAXWORDS = 90;
+  var stats = [];
+  
+  //create a document for the teleprompter script
+  Logger.log('The presentation contains %s slides:', slides.length);
+  name = presentation.title + " Teleprompter script " + "Slides " + startSlide + " to " + endSlide
+  doc = DocumentApp.create(name);
+  edited = doc.getBody();
+  text = edited.editAsText();
+  //end = +endSlide;
+  
+  //go through each slide and count the words
+  for (i = startSlide-1; i < endSlide; i++) { 
+    alert = false;
+    rr = SlidesApp.getActivePresentation().getSlides()[i]
+    sn = rr.getNotesPage().getSpeakerNotesShape().getText();
+    snString = sn.asString();
+    //split the string into words, then count them
+    wordCount = snString.split(/\s* \s*/).length;
+    wordTotal = wordTotal + wordCount
+    Logger.log("word count is %s",wordTotal);
+    //calculate the approx time for slide
+    slideTime = Math.round(wordCount/wordsPerSec);       
+    scriptTime = Math.round(wordTotal/wordsPerSec);
+    
+    if(wordCount >= MAXWORDS){
+      alert = true;
+    }
+    //adjust the slide number that is printed out - add one because slides starts at 0, but shows as slide 1
+    if(alert == true){
+      //text.appendText("####THIS SLIDE MAY BE TOO LONG####\n");
+    }
+    slideAdjust = i+1;
+    Logger.log('slide %s %s ', slideAdjust, snString); 
+    slideNumber = "Slide " + slideAdjust + "\n";
+    var bolded = text.appendText(slideNumber);
+    recordTime = "Time to record slide = " + slideTime + "sec.  Total time to record = " + scriptTime + " sec. \n";
+    //text.appendText(recordTime)
+    text.appendText("\n");
+    var boldNot = text.appendText(snString);
+    text.appendText("\n\n");
+    //add to array for end of file total stats
+    stats[slideAdjust] = slideTime;
+  }
+    Logger.log("word count is %s",wordTotal);
+    text.appendText("Slide Stats\n\n");
+  for(j=startSlide;j< endSlide;j++){
+    text.appendText("Slide " + j + ": " + stats[j] + " sec.\n");
+  }
+    text.appendText("Total time = " + scriptTime + " sec.");
+}
